@@ -2,19 +2,16 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.openqa.selenium.By;
-import org.openqa.selenium.ElementNotInteractableException;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.WebElement;
+import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.Select;
 import org.openqa.selenium.support.ui.WebDriverWait;
-
+import org.assertj.core.api.SoftAssertions;
 import java.time.Duration;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 class BasicTests {
@@ -37,7 +34,7 @@ class BasicTests {
 
     @Test
     void firstTest()  {
-        assertEquals(BASE_URL, driver.getCurrentUrl());
+        assertEquals(WEB_FORM, driver.getCurrentUrl());
     }
 
     @Test
@@ -53,7 +50,7 @@ class BasicTests {
     }
 
     @Test
-    void negativeTest() throws InterruptedException {
+    void mouseOverTest() throws InterruptedException {
         driver.get("https://bonigarcia.dev/selenium-webdriver-java/mouse-over.html");
         List<WebElement> elements = driver.findElements(By.xpath("//div[contains(@class, 'figure')]"));
         for (WebElement element : elements) {
@@ -67,37 +64,51 @@ class BasicTests {
 
     @Test
     void inputTest() {
+
+        String firstText = "Random first text";
+        String secondText = "Random second text";
+        String textAreaText = "Textarea text text text";
+
         WebElement textInput = driver.findElement(By.xpath("//input[@id = 'my-text-id']"));
-        textInput.sendKeys("Random first text");
+        textInput.sendKeys(firstText);
 
         WebElement passwordInput = driver.findElement(By.xpath("//input[@name = 'my-password']"));
-        passwordInput.sendKeys("Random second text");
+        passwordInput.sendKeys(secondText);
 
         WebElement textArea = driver.findElement(By.xpath("//textarea[@name = 'my-textarea']"));
-        textArea.sendKeys("Textarea text text text");
+        textArea.sendKeys(textAreaText);
 
         String enteredText = textInput.getAttribute("value");
-        assertEquals("Random first text", enteredText, "The text does not match the expected value");
         String enteredPassword = passwordInput.getAttribute("value");
-        assertEquals("Random second text", enteredPassword, "The password does not match the expected value");
         String enteredTextarea = textArea.getAttribute("value");
-        assertEquals("Textarea text text text", enteredTextarea, "The textarea text does not match the expected value");
+
+        SoftAssertions.assertSoftly(softly -> {
+            softly.assertThat(enteredText).isEqualTo(firstText);
+            softly.assertThat(enteredPassword).isEqualTo(secondText);
+            softly.assertThat(enteredTextarea).isEqualTo(textAreaText);
+        });
     }
 
     @Test
     void disabledInput() {
         WebElement disabledForm = driver.findElement(By.cssSelector("input.form-control[disabled]"));
-        try {
-            disabledForm.sendKeys("Random text");
-            Assertions.fail("Expected ElementNotIntractableException was not thrown");
-        } catch (ElementNotInteractableException e) {
-        }
+        assertEquals("",disabledForm.getText());
+        Exception thrown = assertThrows(ElementNotInteractableException.class, () -> disabledForm.sendKeys("Test"));
+        assertThat(thrown.getMessage()).contains("element not intractable");
     }
 
     @Test
     void readonlyField() {
-        WebElement readonlyField = driver.findElement(By.xpath("//input[@name = 'my-readonly']"));
-        assertNotNull(readonlyField.getAttribute("readonly"), "The field state isn't readonly");
+        WebElement readonly = driver.findElement(By.name("my-readonly"));
+        //readonly.click();
+        boolean isReadOnly = readonly.getAttribute("readonly") != null;
+        System.out.println(isReadOnly);
+        System.out.println(readonly.getAttribute("readonly"));
+
+        assertThat(Boolean.parseBoolean(readonly.getAttribute("readonly")))
+                .as("Should be %s", isReadOnly)
+                .isFalse();
+        Assertions.assertEquals(readonly.getAttribute("readonly"), "true");
     }
 
     @Test
@@ -106,33 +117,57 @@ class BasicTests {
         WebElement dropdownOption = driver.findElement(By.xpath("//select[@name='my-select']/option[3]"));
         dropdownOption.click();
         assertTrue(dropdownOption.isSelected(), "The selected item is not selected from the list");
+    }
 
-        //Доделать с Геннадием
-        WebElement datalistDrop = driver.findElement(By.xpath("//input[@list = 'my-options']"));
-        datalistDrop.sendKeys("New");
-        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(2));
-        List<WebElement> options = wait.until(ExpectedConditions.visibilityOfAllElementsLocatedBy(By.cssSelector("datalist#my-options option")));
-        Select select = new Select(datalistDrop);
-
+    @Test
+    void selectFromDataListTest() throws InterruptedException {
+        WebElement dataList = driver.findElement(By.name("my-datalist"));
+        List<WebElement> dataListOptions = driver.findElements(By.xpath("//datalist/option"));
+        for (WebElement option : dataListOptions) {
+            dataList.clear();
+            String optionValue = option.getAttribute("value");
+            dataList.sendKeys(optionValue);
+            System.out.println("Selected: " + optionValue);
+            Thread.sleep(2000);
+        }
+        dataList.clear();
+        dataList.sendKeys("CustomValue");
+        Thread.sleep(3000);
     }
 
     @Test
     void checkBoxesTests() {
         WebElement checkedCheckbox1 = driver.findElement(By.xpath("//input[@id = 'my-check-1']"));
-        boolean isChecked = checkedCheckbox1.isSelected();
-        assertTrue(isChecked, "Checkbox 1 should be chosen");
+        assertTrue(checkedCheckbox1.isSelected(), "Checkbox 1 should be chosen selected");
 
         WebElement checkedCheckbox2 = driver.findElement(By.xpath("//input[@id = 'my-check-2']"));
         checkedCheckbox2.click();
-        boolean isChecked2 = checkedCheckbox1.isSelected();
-        assertTrue(isChecked2, "Checkbox 2 should be chosen");
-        assertTrue(checkedCheckbox1.isSelected() && checkedCheckbox2.isSelected(), "Both buttons are chosen");
+        assertTrue(checkedCheckbox1.isSelected(), "Checkbox 1 should be chosen after selecting Checkbox 2");
+        assertTrue(checkedCheckbox2.isSelected(), "Checkbox 2 should be chosen after clicking on it");
 
+        driver.navigate().refresh();
+        WebElement refreshedCheckbox1 = driver.findElement(By.xpath("//input[@id = 'my-check-1']"));
+        WebElement refreshedCheckbox2 = driver.findElement(By.xpath("//input[@id = 'my-check-2']"));
+
+        assertTrue(refreshedCheckbox1.isSelected(), "Checkbox 1 should be chosen after refreshing");
+        assertFalse(refreshedCheckbox2.isSelected(), "Checkbox 2 should not be chosen refreshing");
+    }
+    @Test
+    void radioButtonsTest() {
         WebElement checkedRadioButton1 = driver.findElement(By.xpath("//input[@id = 'my-radio-1']"));
+        assertTrue(checkedRadioButton1.isSelected(), "Only the first radio button should be chosen");
         WebElement checkedRadioButton2 = driver.findElement(By.xpath("//input[@id = 'my-radio-2']"));
-        assertTrue(checkedRadioButton1.isSelected() ^ checkedRadioButton2.isSelected(), "Only one radio button should be chosen");
+        assertFalse(checkedRadioButton2.isSelected(), "The second radio button should not be chosen");
+
         checkedRadioButton2.click();
-        assertTrue(checkedRadioButton1.isSelected() ^ checkedRadioButton2.isSelected(), "Only one radio button should be chosen");
+        assertTrue(checkedRadioButton2.isSelected(), "Only first radio button should be chosen");
+        assertFalse(checkedRadioButton1.isSelected(), "First radio button should not be chosen after click on the second radio button");
+
+        driver.navigate().refresh();
+        WebElement refreshedRadioButton1 = driver.findElement(By.xpath("//input[@id = 'my-radio-1']"));
+        WebElement refreshedRadioButton2 = driver.findElement(By.xpath("//input[@id = 'my-radio-2']"));
+        assertTrue(refreshedRadioButton1.isSelected(), "Radiobutton 1 should be chosen after refreshing");
+        assertFalse(refreshedRadioButton2.isSelected(), "Radiobutton 2 should not be chosen refreshing");
     }
 
     @Test
@@ -152,7 +187,7 @@ class BasicTests {
         WebElement returnButton = driver.findElement(By.xpath("//a[contains(text(), 'Return to index')]"));
         returnButton.click();
         String currentUrl = driver.getCurrentUrl();
-        assertEquals("https://bonigarcia.dev/selenium-webdriver-java/index.html", currentUrl, "Current url does not match the expected one");
+        assertEquals(BASE_URL + "/index.html", currentUrl, "Current url does not match the expected one");
     }
 
     @Test
@@ -161,5 +196,79 @@ class BasicTests {
         uploadForm.sendKeys("/Users/aleksandrgaisin/Downloads/images.png");
         WebElement submit = driver.findElement(By.xpath("//button[text()='Submit']"));
         submit.click();
+
+       WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(2));
+       wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//h1[@class='display-6' and text()='Form submitted']")));
+       wait.until(ExpectedConditions.visibilityOfElementLocated(By.xpath("//p[@class='lead' and text()='Received!']")));
+
+    }
+
+    @Test
+    void dragAndDrop() {
+        driver.get("https://bonigarcia.dev/selenium-webdriver-java/drag-and-drop.html");
+        WebElement draggable = driver.findElement(By.xpath("//div[@id='draggable']"));
+        WebElement target = driver.findElement(By.xpath("//div[@id='target']"));
+
+        new Actions(driver)
+                .dragAndDrop(draggable, target)
+                .perform();
+    }
+
+    @Test
+    void checkSlowCalc() {
+        driver.get("https://bonigarcia.dev/selenium-webdriver-java/slow-calculator.html");
+
+        By calcButton = By.xpath("//h1[@class = 'display-6' and text()='Slow calculator']");
+        By oneButton = By.xpath("//div[@class='keys']/span[text()='1']");
+        By threeButton = By.xpath("//div[@class='keys']/span[text()='3']");
+        By plusButton = By.xpath("//div[@class='keys']/span[text()='+']");
+        By equalButton = By.xpath("//div[@class='keys']/span[text()='=']");
+        By resultField = By.xpath("//div[@class='screen']");
+
+        driver.findElement(calcButton).click();
+        driver.findElement(oneButton).click();
+        driver.findElement(plusButton).click();
+        driver.findElement(threeButton).click();
+        driver.findElement(equalButton).click();
+
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(7));
+        wait.until(ExpectedConditions.textToBe(resultField, "4"));
+    }
+
+    @Test
+    void dialogBoxesTest() {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(5));
+
+
+        driver.get("https://bonigarcia.dev/selenium-webdriver-java/dialog-boxes.html");
+        driver.findElement(By.id("my-alert")).click();
+        Alert launchAlert = driver.switchTo().alert();
+        wait.until(ExpectedConditions.alertIsPresent());
+        assertThat(launchAlert.getText()).isEqualTo("Hello world!");
+        launchAlert.accept();
+
+        driver.findElement(By.id("my-confirm")).click();
+        driver.switchTo().alert().accept();
+        assertThat(driver.findElement(By.id("confirm-text")).getText()).isEqualTo("You chose: true");
+        driver.findElement(By.id("my-confirm")).click();
+        driver.switchTo().alert().dismiss();
+
+        assertThat(driver.findElement(By.id("confirm-text")).getText()).isEqualTo("You chose: false");
+        driver.findElement(By.id("my-prompt")).click();
+        driver.switchTo().alert().sendKeys("TestTest");
+        driver.switchTo().alert().accept();
+        assertThat(driver.findElement(By.id("prompt-text")).getText()).isEqualTo("You typed: TestTest");
+
+        driver.findElement(By.id("my-modal")).click();
+        WebElement saveChanges = driver.findElement(By.xpath("//button[normalize-space() = 'Save changes']"));
+        wait.until(ExpectedConditions.elementToBeClickable(saveChanges));
+        saveChanges.click();
+        assertThat(driver.findElement(By.id("modal-text")).getText()).isEqualTo("You chose: Save changes");
+
+        driver.findElement(By.id("my-modal")).click();
+        WebElement close = driver.findElement(By.xpath("//button[normalize-space() = 'Close']"));
+        wait.until(ExpectedConditions.elementToBeClickable(close));
+        close.click();
+        assertThat(driver.findElement(By.id("modal-text")).getText()).isEqualTo("You chose: Close");
     }
 }
